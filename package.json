@@ -1,7 +1,7 @@
 {
   "name": "go-import-pages",
   "description": "GitHub Actions for Go import path redirect with GitHub Pages",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "author": "",
   "type": "module",
   "private": true,
