@@ -1,7 +1,7 @@
 {
-  "name": "typescript-action",
-  "description": "GitHub Actions TypeScript template",
-  "version": "0.1.0",
+  "name": "go-import-pages",
+  "description": "GitHub Actions for Go import path redirect with GitHub Pages",
+  "version": "0.1.1",
   "author": "",
   "type": "module",
   "private": true,
@@ -33,7 +33,8 @@
     "package": "npx rollup --config rollup.config.ts --configPlugin @rollup/plugin-typescript",
     "package:watch": "npm run package -- --watch",
     "test": "NODE_OPTIONS=--experimental-vm-modules NODE_NO_WARNINGS=1 npx jest",
-    "all": "npm run format:write && npm run lint && npm run test && npm run coverage && npm run package"
+    "license": "licensed cache && licensed status",
+    "all": "npm run format:write && npm run lint && npm run test && npm run coverage && npm run license && npm run package"
   },
   "license": "MIT",
   "dependencies": {
