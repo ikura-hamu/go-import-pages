@@ -37,10 +37,10 @@ export async function update(
 
   const suffixes = makeImportSuffixList(params.payload.goModInfo)
   suffixes.push('')
-  const importPrefixPath = pathUrlToPath(params.payload.goModInfo.Module.Path)
+  const importPrefixPath = pathUrlToPath(params.payload.goModInfo.module)
 
   const content = generateTemplate({
-    importPrefix: params.payload.goModInfo.Module.Path,
+    importPrefix: params.payload.goModInfo.module,
     owner: params.payload.owner,
     repoName: params.payload.repoName
   })
@@ -84,7 +84,7 @@ export async function update(
  * @returns Array of import suffixes (paths relative to the module root)
  */
 export function makeImportSuffixList(goModInfo: GoModInfo): string[] {
-  if (!goModInfo.Module.Path) {
+  if (!goModInfo.module) {
     return []
   }
 
@@ -119,10 +119,9 @@ export function makeImportSuffixList(goModInfo: GoModInfo): string[] {
     )
   }
 
-  return goModInfo.Imports.filter((imp) =>
-    checkPrefixUrl(imp, goModInfo.Module.Path)
-  )
-    .map((imp) => imp.replace(goModInfo.Module.Path, '').replace(/^\//, ''))
+  return goModInfo.packages
+    .filter((pac) => checkPrefixUrl(pac, goModInfo.module))
+    .map((imp) => imp.replace(goModInfo.module, '').replace(/^\//, ''))
     .filter((suffix) => suffix.length > 0) // Remove empty suffixes
 }
 

@@ -10,10 +10,8 @@ export const mockGoOperations: jest.Mocked<GoOperations> = {
 
 // Mock data for tests
 export const mockGoModInfo: GoModInfo = {
-  Module: {
-    Path: 'github.com/example/test-module'
-  },
-  Imports: [
+  module: 'github.com/example/test-module',
+  packages: [
     'github.com/example/test-module/internal/config',
     'github.com/example/test-module/pkg/utils',
     'external-package'
