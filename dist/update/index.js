@@ -34767,6 +34767,12 @@ class $ZodAsyncError extends Error {
         super(`Encountered Promise during synchronous parse. Use .parseAsync() instead.`);
     }
 }
+class $ZodEncodeError extends Error {
+    constructor(name) {
+        super(`Encountered unidirectional transform during encode: ${name}`);
+        this.name = "ZodEncodeError";
+    }
+}
 const globalConfig = {};
 function config(newConfig) {
     return globalConfig;
@@ -34967,6 +34973,11 @@ function extend(schema, shape) {
     if (!isPlainObject(shape)) {
         throw new Error("Invalid input to extend: expected a plain object");
     }
+    const checks = schema._zod.def.checks;
+    const hasChecks = checks && checks.length > 0;
+    if (hasChecks) {
+        throw new Error("Object schemas containing refinements cannot be extended. Use `.safeExtend()` instead.");
+    }
     const def = mergeDefs(schema._zod.def, {
         get shape() {
             const _shape = { ...schema._zod.def.shape, ...shape };
@@ -34975,6 +34986,21 @@ function extend(schema, shape) {
         },
         checks: [],
     });
+    return clone$1(schema, def);
+}
+function safeExtend(schema, shape) {
+    if (!isPlainObject(shape)) {
+        throw new Error("Invalid input to safeExtend: expected a plain object");
+    }
+    const def = {
+        ...schema._zod.def,
+        get shape() {
+            const _shape = { ...schema._zod.def.shape, ...shape };
+            assignProp(this, "shape", _shape); // self-caching
+            return _shape;
+        },
+        checks: schema._zod.def.checks,
+    };
     return clone$1(schema, def);
 }
 function merge(a, b) {
@@ -35067,6 +35093,8 @@ function required(Class, schema, mask) {
 }
 // invalid_type | too_big | too_small | invalid_format | not_multiple_of | unrecognized_keys | invalid_union | invalid_key | invalid_element | invalid_value | custom
 function aborted(x, startIndex = 0) {
+    if (x.aborted === true)
+        return true;
     for (let i = startIndex; i < x.issues.length; i++) {
         if (x.issues[i]?.continue !== true) {
             return true;
@@ -35251,6 +35279,34 @@ const _safeParseAsync = (_Err) => async (schema, value, _ctx) => {
         : { success: true, data: result.value };
 };
 const safeParseAsync$1 = /* @__PURE__*/ _safeParseAsync($ZodRealError);
+const _encode = (_Err) => (schema, value, _ctx) => {
+    const ctx = _ctx ? Object.assign(_ctx, { direction: "backward" }) : { direction: "backward" };
+    return _parse(_Err)(schema, value, ctx);
+};
+const _decode = (_Err) => (schema, value, _ctx) => {
+    return _parse(_Err)(schema, value, _ctx);
+};
+const _encodeAsync = (_Err) => async (schema, value, _ctx) => {
+    const ctx = _ctx ? Object.assign(_ctx, { direction: "backward" }) : { direction: "backward" };
+    return _parseAsync(_Err)(schema, value, ctx);
+};
+const _decodeAsync = (_Err) => async (schema, value, _ctx) => {
+    return _parseAsync(_Err)(schema, value, _ctx);
+};
+const _safeEncode = (_Err) => (schema, value, _ctx) => {
+    const ctx = _ctx ? Object.assign(_ctx, { direction: "backward" }) : { direction: "backward" };
+    return _safeParse(_Err)(schema, value, ctx);
+};
+const _safeDecode = (_Err) => (schema, value, _ctx) => {
+    return _safeParse(_Err)(schema, value, _ctx);
+};
+const _safeEncodeAsync = (_Err) => async (schema, value, _ctx) => {
+    const ctx = _ctx ? Object.assign(_ctx, { direction: "backward" }) : { direction: "backward" };
+    return _safeParseAsync(_Err)(schema, value, ctx);
+};
+const _safeDecodeAsync = (_Err) => async (schema, value, _ctx) => {
+    return _safeParseAsync(_Err)(schema, value, _ctx);
+};
 
 const cuid = /^[cC][^\s-]{8,}$/;
 const cuid2 = /^[0-9a-z]+$/;
@@ -35267,7 +35323,7 @@ const guid = /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9
  * @param version Optionally specify a version 1-8. If no version is specified, all versions are supported. */
 const uuid = (version) => {
     if (!version)
-        return /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$/;
+        return /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/;
     return new RegExp(`^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-${version}[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$`);
 };
 /** Practical email validation */
@@ -35592,8 +35648,8 @@ class Doc {
 
 const version$2 = {
     major: 4,
-    minor: 0,
-    patch: 17,
+    minor: 1,
+    patch: 1,
 };
 
 const $ZodType = /*@__PURE__*/ $constructor("$ZodType", (inst, def) => {
@@ -35607,7 +35663,6 @@ const $ZodType = /*@__PURE__*/ $constructor("$ZodType", (inst, def) => {
     if (inst._zod.traits.has("$ZodCheck")) {
         checks.unshift(inst);
     }
-    //
     for (const ch of checks) {
         for (const fn of ch._zod.onattach) {
             fn(inst);
@@ -35664,7 +35719,47 @@ const $ZodType = /*@__PURE__*/ $constructor("$ZodType", (inst, def) => {
             }
             return payload;
         };
+        // const handleChecksResult = (
+        //   checkResult: ParsePayload,
+        //   originalResult: ParsePayload,
+        //   ctx: ParseContextInternal
+        // ): util.MaybeAsync<ParsePayload> => {
+        //   // if the checks mutated the value && there are no issues, re-parse the result
+        //   if (checkResult.value !== originalResult.value && !checkResult.issues.length)
+        //     return inst._zod.parse(checkResult, ctx);
+        //   return originalResult;
+        // };
+        const handleCanaryResult = (canary, payload, ctx) => {
+            // abort if the canary is aborted
+            if (aborted(canary)) {
+                canary.aborted = true;
+                return canary;
+            }
+            // run checks first, then
+            const checkResult = runChecks(payload, checks, ctx);
+            if (checkResult instanceof Promise) {
+                if (ctx.async === false)
+                    throw new $ZodAsyncError();
+                return checkResult.then((checkResult) => inst._zod.parse(checkResult, ctx));
+            }
+            return inst._zod.parse(checkResult, ctx);
+        };
         inst._zod.run = (payload, ctx) => {
+            if (ctx.skipChecks) {
+                return inst._zod.parse(payload, ctx);
+            }
+            if (ctx.direction === "backward") {
+                // run canary
+                // initial pass (no checks)
+                const canary = inst._zod.parse({ value: payload.value, issues: [] }, { ...ctx, skipChecks: true });
+                if (canary instanceof Promise) {
+                    return canary.then((canary) => {
+                        return handleCanaryResult(canary, payload, ctx);
+                    });
+                }
+                return handleCanaryResult(canary, payload, ctx);
+            }
+            // forward
             const result = inst._zod.parse(payload, ctx);
             if (result instanceof Promise) {
                 if (ctx.async === false)
@@ -36076,25 +36171,61 @@ function handlePropertyResult(result, final, key, input) {
         final.value[key] = result.value;
     }
 }
+function normalizeDef(def) {
+    const keys = Object.keys(def.shape);
+    for (const k of keys) {
+        if (!def.shape[k]._zod.traits.has("$ZodType")) {
+            throw new Error(`Invalid element at key "${k}": expected a Zod schema`);
+        }
+    }
+    const okeys = optionalKeys(def.shape);
+    return {
+        ...def,
+        keys,
+        keySet: new Set(keys),
+        numKeys: keys.length,
+        optionalKeys: new Set(okeys),
+    };
+}
+function handleCatchall(proms, input, payload, ctx, def, inst) {
+    const unrecognized = [];
+    // iterate over input keys
+    const keySet = def.keySet;
+    const _catchall = def.catchall._zod;
+    const t = _catchall.def.type;
+    for (const key of Object.keys(input)) {
+        if (keySet.has(key))
+            continue;
+        if (t === "never") {
+            unrecognized.push(key);
+            continue;
+        }
+        const r = _catchall.run({ value: input[key], issues: [] }, ctx);
+        if (r instanceof Promise) {
+            proms.push(r.then((r) => handlePropertyResult(r, payload, key, input)));
+        }
+        else {
+            handlePropertyResult(r, payload, key, input);
+        }
+    }
+    if (unrecognized.length) {
+        payload.issues.push({
+            code: "unrecognized_keys",
+            keys: unrecognized,
+            input,
+            inst,
+        });
+    }
+    if (!proms.length)
+        return payload;
+    return Promise.all(proms).then(() => {
+        return payload;
+    });
+}
 const $ZodObject = /*@__PURE__*/ $constructor("$ZodObject", (inst, def) => {
     // requires cast because technically $ZodObject doesn't extend
     $ZodType.init(inst, def);
-    const _normalized = cached(() => {
-        const keys = Object.keys(def.shape);
-        for (const k of keys) {
-            if (!def.shape[k]._zod.traits.has("$ZodType")) {
-                throw new Error(`Invalid element at key "${k}": expected a Zod schema`);
-            }
-        }
-        const okeys = optionalKeys(def.shape);
-        return {
-            shape: def.shape,
-            keys,
-            keySet: new Set(keys),
-            numKeys: keys.length,
-            optionalKeys: new Set(okeys),
-        };
-    });
+    const _normalized = cached(() => normalizeDef(def));
     defineLazy(inst._zod, "propValues", () => {
         const shape = def.shape;
         const propValues = {};
@@ -36108,6 +36239,45 @@ const $ZodObject = /*@__PURE__*/ $constructor("$ZodObject", (inst, def) => {
         }
         return propValues;
     });
+    const isObject$1 = isObject;
+    const catchall = def.catchall;
+    let value;
+    inst._zod.parse = (payload, ctx) => {
+        value ?? (value = _normalized.value);
+        const input = payload.value;
+        if (!isObject$1(input)) {
+            payload.issues.push({
+                expected: "object",
+                code: "invalid_type",
+                input,
+                inst,
+            });
+            return payload;
+        }
+        payload.value = {};
+        const proms = [];
+        const shape = value.shape;
+        for (const key of value.keys) {
+            const el = shape[key];
+            const r = el._zod.run({ value: input[key], issues: [] }, ctx);
+            if (r instanceof Promise) {
+                proms.push(r.then((r) => handlePropertyResult(r, payload, key, input)));
+            }
+            else {
+                handlePropertyResult(r, payload, key, input);
+            }
+        }
+        if (!catchall) {
+            return proms.length ? Promise.all(proms).then(() => payload) : payload;
+        }
+        return handleCatchall(proms, input, payload, ctx, _normalized.value, inst);
+    };
+});
+const $ZodObjectJIT = /*@__PURE__*/ $constructor("$ZodObjectJIT", (inst, def) => {
+    // requires cast because technically $ZodObject doesn't extend
+    $ZodObject.init(inst, def);
+    const superParse = inst._zod.parse;
+    const _normalized = cached(() => normalizeDef(def));
     const generateFastpass = (shape) => {
         const doc = new Doc(["shape", "payload", "ctx"]);
         const normalized = _normalized.value;
@@ -36168,63 +36338,16 @@ const $ZodObject = /*@__PURE__*/ $constructor("$ZodObject", (inst, def) => {
             });
             return payload;
         }
-        const proms = [];
         if (jit && fastEnabled && ctx?.async === false && ctx.jitless !== true) {
             // always synchronous
             if (!fastpass)
                 fastpass = generateFastpass(def.shape);
             payload = fastpass(payload, ctx);
+            if (!catchall)
+                return payload;
+            return handleCatchall([], input, payload, ctx, value, inst);
         }
-        else {
-            payload.value = {};
-            const shape = value.shape;
-            for (const key of value.keys) {
-                const el = shape[key];
-                const r = el._zod.run({ value: input[key], issues: [] }, ctx);
-                if (r instanceof Promise) {
-                    proms.push(r.then((r) => handlePropertyResult(r, payload, key, input)));
-                }
-                else {
-                    handlePropertyResult(r, payload, key, input);
-                }
-            }
-        }
-        if (!catchall) {
-            return proms.length ? Promise.all(proms).then(() => payload) : payload;
-        }
-        const unrecognized = [];
-        // iterate over input keys
-        const keySet = value.keySet;
-        const _catchall = catchall._zod;
-        const t = _catchall.def.type;
-        for (const key of Object.keys(input)) {
-            if (keySet.has(key))
-                continue;
-            if (t === "never") {
-                unrecognized.push(key);
-                continue;
-            }
-            const r = _catchall.run({ value: input[key], issues: [] }, ctx);
-            if (r instanceof Promise) {
-                proms.push(r.then((r) => handlePropertyResult(r, payload, key, input)));
-            }
-            else {
-                handlePropertyResult(r, payload, key, input);
-            }
-        }
-        if (unrecognized.length) {
-            payload.issues.push({
-                code: "unrecognized_keys",
-                keys: unrecognized,
-                input,
-                inst,
-            });
-        }
-        if (!proms.length)
-            return payload;
-        return Promise.all(proms).then(() => {
-            return payload;
-        });
+        return superParse(payload, ctx);
     };
 });
 function handleUnionResults(results, final, inst, ctx) {
@@ -36396,9 +36519,12 @@ const $ZodEnum = /*@__PURE__*/ $constructor("$ZodEnum", (inst, def) => {
 });
 const $ZodTransform = /*@__PURE__*/ $constructor("$ZodTransform", (inst, def) => {
     $ZodType.init(inst, def);
-    inst._zod.parse = (payload, _ctx) => {
+    inst._zod.parse = (payload, ctx) => {
+        if (ctx.direction === "backward") {
+            throw new $ZodEncodeError(inst.constructor.name);
+        }
         const _out = def.transform(payload.value, payload);
-        if (_ctx.async) {
+        if (ctx.async) {
             const output = _out instanceof Promise ? _out : Promise.resolve(_out);
             return output.then((output) => {
                 payload.value = output;
@@ -36454,6 +36580,7 @@ const $ZodNullable = /*@__PURE__*/ $constructor("$ZodNullable", (inst, def) => {
         return def.innerType._zod.values ? new Set([...def.innerType._zod.values, null]) : undefined;
     });
     inst._zod.parse = (payload, ctx) => {
+        // Forward direction (decode): allow null to pass through
         if (payload.value === null)
             return payload;
         return def.innerType._zod.run(payload, ctx);
@@ -36465,13 +36592,18 @@ const $ZodDefault = /*@__PURE__*/ $constructor("$ZodDefault", (inst, def) => {
     inst._zod.optin = "optional";
     defineLazy(inst._zod, "values", () => def.innerType._zod.values);
     inst._zod.parse = (payload, ctx) => {
+        if (ctx.direction === "backward") {
+            return def.innerType._zod.run(payload, ctx);
+        }
+        // Forward direction (decode): apply defaults for undefined input
         if (payload.value === undefined) {
             payload.value = def.defaultValue;
             /**
-             * $ZodDefault always returns the default value immediately.
+             * $ZodDefault returns the default value immediately in forward direction.
              * It doesn't pass the default value into the validator ("prefault"). There's no reason to pass the default value through validation. The validity of the default is enforced by TypeScript statically. Otherwise, it's the responsibility of the user to ensure the default is valid. In the case of pipes with divergent in/out types, you can specify the default on the `in` schema of your ZodPipe to set a "prefault" for the pipe.   */
             return payload;
         }
+        // Forward direction: continue with default handling
         const result = def.innerType._zod.run(payload, ctx);
         if (result instanceof Promise) {
             return result.then((result) => handleDefaultResult(result, def));
@@ -36490,6 +36622,10 @@ const $ZodPrefault = /*@__PURE__*/ $constructor("$ZodPrefault", (inst, def) => {
     inst._zod.optin = "optional";
     defineLazy(inst._zod, "values", () => def.innerType._zod.values);
     inst._zod.parse = (payload, ctx) => {
+        if (ctx.direction === "backward") {
+            return def.innerType._zod.run(payload, ctx);
+        }
+        // Forward direction (decode): apply prefault for undefined input
         if (payload.value === undefined) {
             payload.value = def.defaultValue;
         }
@@ -36527,6 +36663,10 @@ const $ZodCatch = /*@__PURE__*/ $constructor("$ZodCatch", (inst, def) => {
     defineLazy(inst._zod, "optout", () => def.innerType._zod.optout);
     defineLazy(inst._zod, "values", () => def.innerType._zod.values);
     inst._zod.parse = (payload, ctx) => {
+        if (ctx.direction === "backward") {
+            return def.innerType._zod.run(payload, ctx);
+        }
+        // Forward direction (decode): apply catch logic
         const result = def.innerType._zod.run(payload, ctx);
         if (result instanceof Promise) {
             return result.then((result) => {
@@ -36565,18 +36705,27 @@ const $ZodPipe = /*@__PURE__*/ $constructor("$ZodPipe", (inst, def) => {
     defineLazy(inst._zod, "optout", () => def.out._zod.optout);
     defineLazy(inst._zod, "propValues", () => def.in._zod.propValues);
     inst._zod.parse = (payload, ctx) => {
+        if (ctx.direction === "backward") {
+            const right = def.out._zod.run(payload, ctx);
+            if (right instanceof Promise) {
+                return right.then((right) => handlePipeResult(right, def.in, ctx));
+            }
+            return handlePipeResult(right, def.in, ctx);
+        }
         const left = def.in._zod.run(payload, ctx);
         if (left instanceof Promise) {
-            return left.then((left) => handlePipeResult(left, def, ctx));
+            return left.then((left) => handlePipeResult(left, def.out, ctx));
         }
-        return handlePipeResult(left, def, ctx);
+        return handlePipeResult(left, def.out, ctx);
     };
 });
-function handlePipeResult(left, def, ctx) {
+function handlePipeResult(left, next, ctx) {
     if (left.issues.length) {
+        // prevent further checks
+        left.aborted = true;
         return left;
     }
-    return def.out._zod.run({ value: left.value, issues: left.issues }, ctx);
+    return next._zod.run({ value: left.value, issues: left.issues }, ctx);
 }
 const $ZodReadonly = /*@__PURE__*/ $constructor("$ZodReadonly", (inst, def) => {
     $ZodType.init(inst, def);
@@ -36585,6 +36734,9 @@ const $ZodReadonly = /*@__PURE__*/ $constructor("$ZodReadonly", (inst, def) => {
     defineLazy(inst._zod, "optin", () => def.innerType._zod.optin);
     defineLazy(inst._zod, "optout", () => def.innerType._zod.optout);
     inst._zod.parse = (payload, ctx) => {
+        if (ctx.direction === "backward") {
+            return def.innerType._zod.run(payload, ctx);
+        }
         const result = def.innerType._zod.run(payload, ctx);
         if (result instanceof Promise) {
             return result.then(handleReadonlyResult);
@@ -37057,7 +37209,7 @@ function _superRefine(fn) {
                 _issue.code ?? (_issue.code = "custom");
                 _issue.input ?? (_issue.input = payload.value);
                 _issue.inst ?? (_issue.inst = ch);
-                _issue.continue ?? (_issue.continue = !ch._zod.def.abort);
+                _issue.continue ?? (_issue.continue = !ch._zod.def.abort); // abort is always undefined, so this is always true...
                 payload.issues.push(issue(_issue));
             }
         };
@@ -37152,10 +37304,20 @@ const parse$2 = /* @__PURE__ */ _parse(ZodRealError);
 const parseAsync = /* @__PURE__ */ _parseAsync(ZodRealError);
 const safeParse = /* @__PURE__ */ _safeParse(ZodRealError);
 const safeParseAsync = /* @__PURE__ */ _safeParseAsync(ZodRealError);
+// Codec functions
+const encode$1 = /* @__PURE__ */ _encode(ZodRealError);
+const decode$2 = /* @__PURE__ */ _decode(ZodRealError);
+const encodeAsync = /* @__PURE__ */ _encodeAsync(ZodRealError);
+const decodeAsync = /* @__PURE__ */ _decodeAsync(ZodRealError);
+const safeEncode = /* @__PURE__ */ _safeEncode(ZodRealError);
+const safeDecode = /* @__PURE__ */ _safeDecode(ZodRealError);
+const safeEncodeAsync = /* @__PURE__ */ _safeEncodeAsync(ZodRealError);
+const safeDecodeAsync = /* @__PURE__ */ _safeDecodeAsync(ZodRealError);
 
 const ZodType = /*@__PURE__*/ $constructor("ZodType", (inst, def) => {
     $ZodType.init(inst, def);
     inst.def = def;
+    inst.type = def.type;
     Object.defineProperty(inst, "_def", { value: def });
     // base methods
     inst.check = (...checks) => {
@@ -37181,6 +37343,15 @@ const ZodType = /*@__PURE__*/ $constructor("ZodType", (inst, def) => {
     inst.parseAsync = async (data, params) => parseAsync(inst, data, params, { callee: inst.parseAsync });
     inst.safeParseAsync = async (data, params) => safeParseAsync(inst, data, params);
     inst.spa = inst.safeParseAsync;
+    // encoding/decoding
+    inst.encode = (data, params) => encode$1(inst, data, params);
+    inst.decode = (data, params) => decode$2(inst, data, params);
+    inst.encodeAsync = async (data, params) => encodeAsync(inst, data, params);
+    inst.decodeAsync = async (data, params) => decodeAsync(inst, data, params);
+    inst.safeEncode = (data, params) => safeEncode(inst, data, params);
+    inst.safeDecode = (data, params) => safeDecode(inst, data, params);
+    inst.safeEncodeAsync = async (data, params) => safeEncodeAsync(inst, data, params);
+    inst.safeDecodeAsync = async (data, params) => safeDecodeAsync(inst, data, params);
     // refinements
     inst.refine = (check, params) => inst.check(refine(check, params));
     inst.superRefine = (refinement) => inst.check(superRefine(refinement));
@@ -37410,7 +37581,7 @@ function array(element, params) {
     return _array(ZodArray, element, params);
 }
 const ZodObject = /*@__PURE__*/ $constructor("ZodObject", (inst, def) => {
-    $ZodObject.init(inst, def);
+    $ZodObjectJIT.init(inst, def);
     ZodType.init(inst, def);
     defineLazy(inst, "shape", () => def.shape);
     inst.keyof = () => _enum(Object.keys(inst._zod.def.shape));
@@ -37421,6 +37592,9 @@ const ZodObject = /*@__PURE__*/ $constructor("ZodObject", (inst, def) => {
     inst.strip = () => inst.clone({ ...inst._zod.def, catchall: undefined });
     inst.extend = (incoming) => {
         return extend(inst, incoming);
+    };
+    inst.safeExtend = (incoming) => {
+        return safeExtend(inst, incoming);
     };
     inst.merge = (other) => merge(inst, other);
     inst.pick = (mask) => pick(inst, mask);
@@ -37513,6 +37687,9 @@ const ZodTransform = /*@__PURE__*/ $constructor("ZodTransform", (inst, def) => {
     $ZodTransform.init(inst, def);
     ZodType.init(inst, def);
     inst._zod.parse = (payload, _ctx) => {
+        if (_ctx.direction === "backward") {
+            throw new $ZodEncodeError(inst.constructor.name);
+        }
         payload.addIssue = (issue$1) => {
             if (typeof issue$1 === "string") {
                 payload.issues.push(issue(issue$1, payload.value, def));

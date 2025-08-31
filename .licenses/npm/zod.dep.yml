@@ -1,6 +1,6 @@
 ---
 name: zod
-version: 4.0.17
+version: 4.1.1
 type: npm
 summary: TypeScript-first schema declaration and validation library with static type
   inference
