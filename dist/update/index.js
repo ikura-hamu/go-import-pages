@@ -308886,7 +308886,7 @@ async function updateAction() {
         const payloadStr = core.getInput('payload', { required: true });
         const changeType = core.getInput('change_type') || 'commit';
         const githubToken = core.getInput('github_token', { required: true });
-        const payload = PayloadSchema.parse(payloadStr);
+        const payload = PayloadSchema.parse(JSON.parse(payloadStr));
         const envReader = newProcessEnvironmentReader();
         const gitOps = newGitOperations();
         const octokit = githubExports.getOctokit(githubToken);
