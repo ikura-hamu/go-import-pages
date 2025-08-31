@@ -2,30 +2,57 @@ import { z } from 'zod'
 import { exec } from '@actions/exec'
 
 export const GoModInfoSchema = z.object({
-  Module: z.object({
-    Path: z.string().min(1)
-  }),
-  Imports: z.array(z.string().min(1))
+  module: z.string().min(1),
+  packages: z.array(z.string().min(1))
 })
 
 export type GoModInfo = z.infer<typeof GoModInfoSchema>
 
 export async function getGoModInfo(): Promise<GoModInfo> {
-  let stdout = ''
-  let stderr = ''
-  const result = await exec('go', ['list', '-json=Module,Imports', '.'], {
-    listeners: {
-      stdout: (data) => {
-        stdout += data.toString()
-      },
-      stderr: (data) => {
-        stderr += data.toString()
+  const readModule = async () => {
+    let stdout = ''
+    let stderr = ''
+    const result = await exec('go', ['list', '-m'], {
+      listeners: {
+        stdout: (data) => {
+          stdout += data.toString()
+        },
+        stderr: (data) => {
+          stderr += data.toString()
+        }
       }
+    })
+    if (result !== 0) {
+      throw new Error(`Failed to read Go module: ${stderr}`)
     }
-  })
-  if (result !== 0) {
-    throw new Error(`Failed to get Go module information: ${stderr}`)
+    return stdout.trim()
   }
 
-  return GoModInfoSchema.parse(JSON.parse(stdout))
+  const readPackages = async () => {
+    let stdout = ''
+    let stderr = ''
+    const result = await exec('go', ['list', './...'], {
+      listeners: {
+        stdout: (data) => {
+          stdout += data.toString()
+        },
+        stderr: (data) => {
+          stderr += data.toString()
+        }
+      }
+    })
+    if (result !== 0) {
+      throw new Error(`Failed to read Go packages: ${stderr}`)
+    }
+    const packages = stdout
+      .split('\n')
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0)
+    return packages
+  }
+
+  return {
+    module: await readModule(),
+    packages: await readPackages()
+  }
 }

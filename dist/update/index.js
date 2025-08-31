@@ -38903,10 +38903,8 @@ function requireExec () {
 requireExec();
 
 const GoModInfoSchema = object({
-    Module: object({
-        Path: string().min(1)
-    }),
-    Imports: array(string().min(1))
+    module: string().min(1),
+    packages: array(string().min(1))
 });
 
 var api = {};
@@ -307305,9 +307303,9 @@ async function update(params, env, fs, git, github) {
     const [currentOwner, currentRepoName] = currentRepo.split('/');
     const suffixes = makeImportSuffixList(params.payload.goModInfo);
     suffixes.push('');
-    const importPrefixPath = pathUrlToPath(params.payload.goModInfo.Module.Path);
+    const importPrefixPath = pathUrlToPath(params.payload.goModInfo.module);
     const content = generateTemplate({
-        importPrefix: params.payload.goModInfo.Module.Path,
+        importPrefix: params.payload.goModInfo.module,
         owner: params.payload.owner,
         repoName: params.payload.repoName
     });
@@ -307344,7 +307342,7 @@ async function update(params, env, fs, git, github) {
  * @returns Array of import suffixes (paths relative to the module root)
  */
 function makeImportSuffixList(goModInfo) {
-    if (!goModInfo.Module.Path) {
+    if (!goModInfo.module) {
         return [];
     }
     function checkPrefixUrl(targetPathStr, prefixPathStr) {
@@ -307367,8 +307365,9 @@ function makeImportSuffixList(goModInfo) {
         return (normalizedTargetUrlPath === normalizedPrefixUrlPath ||
             normalizedTargetUrlPath.startsWith(normalizedPrefixUrlPath + '/'));
     }
-    return goModInfo.Imports.filter((imp) => checkPrefixUrl(imp, goModInfo.Module.Path))
-        .map((imp) => imp.replace(goModInfo.Module.Path, '').replace(/^\//, ''))
+    return goModInfo.packages
+        .filter((pac) => checkPrefixUrl(pac, goModInfo.module))
+        .map((imp) => imp.replace(goModInfo.module, '').replace(/^\//, ''))
         .filter((suffix) => suffix.length > 0); // Remove empty suffixes
 }
 // example.com/abc/def -> /abc/def

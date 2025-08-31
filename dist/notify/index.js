@@ -34210,29 +34210,55 @@ function superRefine(fn) {
     return _superRefine(fn);
 }
 
-const GoModInfoSchema = object({
-    Module: object({
-        Path: string().min(1)
-    }),
-    Imports: array(string().min(1))
+object({
+    module: string().min(1),
+    packages: array(string().min(1))
 });
 async function getGoModInfo() {
-    let stdout = '';
-    let stderr = '';
-    const result = await execExports.exec('go', ['list', '-json=Module,Imports', '.'], {
-        listeners: {
-            stdout: (data) => {
-                stdout += data.toString();
-            },
-            stderr: (data) => {
-                stderr += data.toString();
+    const readModule = async () => {
+        let stdout = '';
+        let stderr = '';
+        const result = await execExports.exec('go', ['list', '-m'], {
+            listeners: {
+                stdout: (data) => {
+                    stdout += data.toString();
+                },
+                stderr: (data) => {
+                    stderr += data.toString();
+                }
             }
+        });
+        if (result !== 0) {
+            throw new Error(`Failed to read Go module: ${stderr}`);
         }
-    });
-    if (result !== 0) {
-        throw new Error(`Failed to get Go module information: ${stderr}`);
-    }
-    return GoModInfoSchema.parse(JSON.parse(stdout));
+        return stdout.trim();
+    };
+    const readPackages = async () => {
+        let stdout = '';
+        let stderr = '';
+        const result = await execExports.exec('go', ['list', './...'], {
+            listeners: {
+                stdout: (data) => {
+                    stdout += data.toString();
+                },
+                stderr: (data) => {
+                    stderr += data.toString();
+                }
+            }
+        });
+        if (result !== 0) {
+            throw new Error(`Failed to read Go packages: ${stderr}`);
+        }
+        const packages = stdout
+            .split('\n')
+            .map((p) => p.trim())
+            .filter((p) => p.length > 0);
+        return packages;
+    };
+    return {
+        module: await readModule(),
+        packages: await readPackages()
+    };
 }
 
 function newGo() {

@@ -71,10 +71,8 @@ describe('generateTemplate', () => {
 
 describe('update', () => {
   const mockGoModInfo: GoModInfo = {
-    Module: {
-      Path: 'example.com/test-module'
-    },
-    Imports: [
+    module: 'example.com/test-module',
+    packages: [
       'example.com/test-module/pkg1',
       'example.com/test-module/pkg2',
       'other.com/external'
