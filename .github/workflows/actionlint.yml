@@ -26,4 +26,4 @@ jobs:
         id: actionlint
         uses: raven-actions/actionlint@e1e2bd5e62e05c92c9c15fef1e5dfa8c7adea87b # v1.2.1
         with:
-          config-file: actionlint.yml
+          flags: -config-file actionlint.yml
